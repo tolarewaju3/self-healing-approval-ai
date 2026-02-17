@@ -1,0 +1,9 @@
+---
+- name: Self Healing Network Setup
+  hosts: localhost
+
+  tasks:
+
+
+    - name: Setup Flink
+      import_tasks: tasks/flink-tasks.yml

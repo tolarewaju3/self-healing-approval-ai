@@ -1,0 +1,79 @@
+---
+- name: Create ServiceNow incident for cell tower issue
+  hosts: all
+  gather_facts: false
+  vars:
+    incident_urgency: "2"
+    incident_impact: "2"
+  tasks:
+
+    - name: Create ServiceNow incident
+      servicenow.itsm.incident:
+        instance:
+          host: "{{ lookup('env', 'SN_HOST') }}"
+          username: "{{ lookup('env', 'SN_USERNAME') }}"
+          password: "{{ lookup('env', 'SN_PASSWORD') }}"
+        state: new
+        caller: admin
+        short_description: "Cell Tower {{ cell_id }} - Performance Degradation"
+        description: |
+          A performance issue has been detected on cell tower {{ cell_id }}.
+
+          Issue Details:
+          - Tower ID: {{ cell_id }}
+          - Issue Type: {{ issue_type | default('Signal degradation') }}
+          - Detected At: {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')) }}
+          {% if config_drift | default(false) | bool %}
+
+          This incident was caused by a configuration drift issue.
+          The tower configuration deviated from the expected baseline settings.
+          Automatic remediation is awaiting approval to restore the correct configuration.
+
+          See workflow notes.
+
+          {% endif %}
+
+
+        urgency: "{{ incident_urgency }}"
+        impact: "{{ incident_impact }}"
+      register: incident_result
+
+    - name: Add configuration drift work note
+      servicenow.itsm.incident:
+        instance:
+          host: "{{ lookup('env', 'SN_HOST') }}"
+          username: "{{ lookup('env', 'SN_USERNAME') }}"
+          password: "{{ lookup('env', 'SN_PASSWORD') }}"
+        number: "{{ incident_result.record.number }}"
+        other:
+          work_notes: '[code]<a href="{{ lookup(''env'', ''AAP_HOSTNAME'') }}/execution/jobs/workflow/{{ tower_workflow_job_id }}/output" target="_blank">Workflow Job</a>[/code]'
+      when: config_drift | default(false) | bool
+
+    - name: Add configuration drift work note
+      servicenow.itsm.incident:
+        instance:
+          host: "{{ lookup('env', 'SN_HOST') }}"
+          username: "{{ lookup('env', 'SN_USERNAME') }}"
+          password: "{{ lookup('env', 'SN_PASSWORD') }}"
+        number: "{{ incident_result.record.number }}"
+        other:
+          work_notes: '[code]<a href="{{ lookup(''env'', ''AAP_HOSTNAME'') }}/execution/administration/workflow-approvals" target="_blank">Workflow approval</a>[/code]'
+      when: config_drift | default(false) | bool
+
+    - name: Display incident number
+      debug:
+        msg: "ServiceNow incident created: {{ incident_result.record.number }}"
+
+    # - name: Notify incident created
+    #   uri:
+    #     url: "https://jzcvqylgahgasmxfcqyb.supabase.co/rest/v1/remediation_events"
+    #     method: POST
+    #     headers:
+    #       apiKey: "{{ lookup('env', 'SUPABASE_ANON_KEY') }}"
+    #     body:
+    #       event_type: "incident_created"
+    #       tower_id: "{{ cell_id }}"
+    #       # incident_number: "{{ incident_result.record.number }}"
+    #     body_format: json
+    #     status_code: 201
+

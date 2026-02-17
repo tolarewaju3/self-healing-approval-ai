@@ -1,0 +1,66 @@
+---
+- name: Get last N lines of logs from newest OpenShift pod matching a label
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    namespace: "openshift-operators"
+    label_selector: "app=cell-tower-simulator"
+    tail_lines: 100
+
+  tasks:
+    - name: Verify we can talk to the cluster (uses current kubeconfig context)
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ namespace }}"
+      register: ns_info
+
+    - name: List pods matching label selector
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ namespace }}"
+        label_selectors:
+          - "app=cell-tower-simulator"
+      register: pod_list
+
+    - name: Fail if no pods found
+      ansible.builtin.fail:
+        msg: "No pods found in namespace={{ namespace }} with label_selector={{ label_selector }}"
+      when: (pod_list.resources | default([]) | length) == 0
+
+    - name: Select newest pod by creationTimestamp
+      ansible.builtin.set_fact:
+        newest_pod: >-
+          {{
+            (pod_list.resources
+              | sort(attribute='metadata.creationTimestamp')
+              | last)
+          }}
+
+    - name: Show which pod we chose
+      ansible.builtin.debug:
+        msg:
+          - "Chosen pod: {{ newest_pod.metadata.name }}"
+          - "Created at: {{ newest_pod.metadata.creationTimestamp }}"
+          - "Namespace: {{ namespace }}"
+          - "Label selector: {{ label_selector }}"
+          - "Tail lines: {{ tail_lines }}"
+          - "Container: {{ (container_name | length > 0) | ternary(container_name, '(default)') }}"
+
+    - name: Get last N lines of logs (default container)
+      kubernetes.core.k8s_log:
+        name: "{{ newest_pod.metadata.name }}"
+        namespace: "{{ namespace }}"
+        tail_lines: "{{ tail_lines }}"
+      register: pod_logs
+
+    - name: Print logs to console
+      ansible.builtin.debug:
+        msg: "{{ pod_logs.log }}"
+
+    - set_stats:
+        data:
+          pod_logs: "{{ pod_logs.log }}"
+

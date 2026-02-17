@@ -1,0 +1,79 @@
+---
+- name: Ensure cell tower simulators are configured from Git
+  hosts: localhost
+  gather_facts: false
+
+  vars_files:
+    - ../vars/cell_towers.yml
+
+  tasks:
+    - name: Ensure cell tower simulator deployments exist
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: "{{ item.deployment_name }}"
+            namespace: "{{ cell_tower_namespace }}"
+          spec:
+            replicas: "{{ cell_tower_replicas }}"
+            selector:
+              matchLabels:
+                app: "{{ item.app_label }}"
+            template:
+              metadata:
+                labels:
+                  app: "{{ item.app_label }}"
+              spec:
+                containers:
+                  - name: cell-tower-simulator
+                    image: "{{ cell_tower_image }}"
+                    ports:
+                      - containerPort: 8080
+                        protocol: TCP
+                    env:
+                      - name: CITY_CODE
+                        value: "{{ item.city_code }}"
+                      - name: MAX_ACTIVE_CALLS
+                        value: "{{ item.max_active_calls | string }}"
+      loop: "{{ cell_towers }}"
+      loop_control:
+        label: "{{ item.deployment_name }}"
+
+    - name: Ensure cell tower simulator Service exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ cell_tower_service_name }}"
+            namespace: "{{ cell_tower_namespace }}"
+          spec:
+            selector:
+              app: "cell-tower-simulator"
+            ports:
+              - port: "{{ cell_tower_service_port }}"
+                targetPort: "{{ cell_tower_target_port }}"
+                protocol: TCP
+
+    - name: Ensure cell tower simulator Route exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: "{{ cell_tower_route_name }}"
+            namespace: "{{ cell_tower_namespace }}"
+          spec:
+            to:
+              kind: Service
+              name: "{{ cell_tower_service_name }}"
+            port:
+              targetPort: "{{ cell_tower_target_port }}"
+    
+    - set_stats:
+        data:
+          check_job_id: "{{ tower_job_id }}"
