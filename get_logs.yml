@@ -47,7 +47,6 @@
           - "Namespace: {{ namespace }}"
           - "Label selector: {{ label_selector }}"
           - "Tail lines: {{ tail_lines }}"
-          - "Container: {{ (container_name | length > 0) | ternary(container_name, '(default)') }}"
 
     - name: Get last N lines of logs (default container)
       kubernetes.core.k8s_log:
