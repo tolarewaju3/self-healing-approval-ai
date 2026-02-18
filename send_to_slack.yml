@@ -10,6 +10,10 @@
     reason: "{{ reason }}"
 
   tasks:
+    - name: Build workflow approval link
+      set_fact:
+        approval_link: "{{ lookup('env', 'AAP_HOSTNAME') }}/execution/administration/workflow-approvals"
+
     - name: Build Slack blocks
       ansible.builtin.set_fact:
         slack_blocks:
@@ -27,11 +31,12 @@
             text:
               type: mrkdwn
               text: "*Why this playbook:*\n{{ reason }}"
+          - type: section
+            text:
+              type: mrkdwn
+              text: ":white_check_mark: *Approval Required*\n<{{ approval_link }}|Open in AAP to Approve>"
 
-    - name: Build workflow approval link
-      set_fact:
-        approval_link: "{{ lookup('env', 'AAP_HOSTNAME') }}/execution/administration/workflow-approvals"
-
+    
     - name: Send Slack message (incoming webhook)
       ansible.builtin.uri:
         url: "{{ slack_webhook_url }}"
