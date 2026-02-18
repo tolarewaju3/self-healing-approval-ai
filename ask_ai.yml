@@ -122,3 +122,9 @@
         that:
           - ai_decision.recommended_playbook in allowed_names
         fail_msg: "AI returned a playbook not in the allowed list."
+
+    - set_stats:
+        data:
+          recommended_playbook: "{{ ai_decision.recommended_playbook }"
+          reason: "{{ ai_decision.reason }"
+
