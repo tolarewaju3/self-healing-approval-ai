@@ -1,0 +1,20 @@
+---
+- name: Launch AAP Job Template
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Launch job template
+      job_launch:
+        controller_host: "{{ lookup('env', 'CONTROLLER_HOST') }}"
+        controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+        controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+        validate_certs: false
+        name: "{{ job_template_name }}"
+        wait: true
+
+      register: job_result
+
+    - name: Show job output
+      debug:
+        var: job_result
