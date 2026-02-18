@@ -13,7 +13,7 @@
         controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
         controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
         validate_certs: false
-        name: "{{ job_template_name }}"
+        name: "{{ recommended_template }}"
         wait: true
 
       register: job_result

@@ -1,17 +1,17 @@
 ---
-- name: Ask AI to choose ONE allowed playbook (no log capture)
+- name: Ask AI to choose ONE allowed job template 
   hosts: localhost
   gather_facts: false
 
   vars:
     tower: "ATX"
 
-    allowed_playbooks:
-      - name: "restart_cell.tower.yml"
+    allowed_templates:
+      - name: "Restart Cell Tower"
         description: "Restarts cell towers"
-      - name: "reconfig_tower.yml"
+      - name: "setup-cell-tower"
         description: "Checks for configuration drift and resets to known good config"
-      - name: "failover_next_neighbor"
+      - name: "Failover to Next Neighbor"
         description: "Sends calls to nearest neighbor"
 
     # OpenAI settings
@@ -19,7 +19,7 @@
     openai_endpoint: "https://api.openai.com/v1/responses"
     openai_api_key: "{{ lookup('env', 'OPENAI_API_KEY') }}"
 
-    schema_name: "choose_playbook"
+    schema_name: "choose_template"
 
   tasks:
     - name: Ensure OPENAI_API_KEY is set
@@ -30,8 +30,8 @@
 
     - name: Format allowed playbooks for prompt
       ansible.builtin.set_fact:
-        allowed_playbooks_text: |-
-          {% for p in allowed_playbooks %}
+        allowed_templates_text: |-
+          {% for p in allowed_templates %}
           - {{ p.name }} - {{ p.description }}
           {% endfor %}
 
@@ -50,28 +50,28 @@
           {{ event_summary }}
 
           Allowed Playbooks:
-          {{ allowed_playbooks_text }}
+          {{ allowed_templates_text }}
 
           Return format:
           {
-            "recommended_playbook": "<playbook_name>",
+            "recommended_template": "<playbook_name>",
             "reason": "<detailed explanation>"
           }
 
     - name: Build schema with enum restricted to allowed playbook names
       ansible.builtin.set_fact:
-        allowed_names: "{{ allowed_playbooks | map(attribute='name') | list }}"
+        allowed_names: "{{ allowed_templates | map(attribute='name') | list }}"
         output_schema:
           type: object
           additionalProperties: false
           properties:
-            recommended_playbook:
+            recommended_template:
               type: string
-              enum: "{{ allowed_playbooks | map(attribute='name') | list }}"
+              enum: "{{ allowed_templates | map(attribute='name') | list }}"
             reason:
               type: string
           required:
-            - recommended_playbook
+            - recommended_template
             - reason
 
     - name: Call OpenAI Responses API with Structured Outputs
@@ -106,17 +106,17 @@
     - name: Show AI decision
       ansible.builtin.debug:
         msg:
-          - "recommended_playbook: {{ ai_decision.recommended_playbook }}"
+          - "recommended_template: {{ ai_decision.recommended_template }}"
           - "reason: {{ ai_decision.reason }}"
 
-    - name: ensure recommended playbook is allowed
+    - name: Ensure recommendeded template is allowed
       ansible.builtin.assert:
         that:
-          - ai_decision.recommended_playbook in allowed_names
-        fail_msg: "AI returned a playbook not in the allowed list."
+          - ai_decision.recommended_template in allowed_names
+        fail_msg: "AI returned a template not in the allowed list."
 
     - set_stats:
         data:
-          recommended_playbook: "{{ ai_decision.recommended_playbook }}"
+          recommended_template: "{{ ai_decision.recommended_template }}"
           reason: "{{ ai_decision.reason }}"
 

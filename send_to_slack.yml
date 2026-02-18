@@ -6,7 +6,7 @@
   vars:
     # Provide these via AAP extra_vars or credentials
     cell_id: "ATX"
-    recommended_playbook: "{{ recommended_playbook }}"
+    recommended_template: "{{ recommended_template }}"
     reason: "{{ reason }}"
 
   tasks:
@@ -26,11 +26,11 @@
               - type: mrkdwn
                 text: "*Cell/Tower:*\n{{ cell_id }}"
               - type: mrkdwn
-                text: "*Playbook:*\n`{{ recommended_playbook }}`"
+                text: "*Job Template:*\n`{{ recommended_template }}`"
           - type: section
             text:
               type: mrkdwn
-              text: "*Why this playbook:*\n{{ reason }}"
+              text: "*Why this template:*\n{{ reason }}"
           - type: section
             text:
               type: mrkdwn
