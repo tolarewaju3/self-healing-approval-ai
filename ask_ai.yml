@@ -5,14 +5,6 @@
 
   vars:
     tower: "ATX"
-    event_summary: |
-      2026-02-16T20:41:12Z ALERT tower=ATX signal=dropped_calls value=0.14 threshold=0.05 window=5m
-      2026-02-16T20:41:13Z CHECK connectivity ping=ok ssh=ok
-      2026-02-16T20:41:14Z METRIC prb_utilization=38% congestion=false
-      2026-02-16T20:41:15Z CONFIG admission_control max_calls_allowed=3 baseline=150
-      2026-02-16T20:41:16Z WARN admission_reject_rate=82% reason="call_limit_exceeded"
-      2026-02-16T20:41:17Z AUDIT config_change user=fieldtech12 change="max_calls_allowed set to 3"
-      2026-02-16T20:41:20Z INFO neighbor_cells overloaded=false available_capacity=medium
 
     allowed_playbooks:
       - name: "restart_cell.tower.yml"
@@ -125,6 +117,6 @@
 
     - set_stats:
         data:
-          recommended_playbook: "{{ ai_decision.recommended_playbook }"
+          recommended_playbook: "{{ ai_decision.recommended_playbook }}"
           reason: "{{ ai_decision.reason }"
 
