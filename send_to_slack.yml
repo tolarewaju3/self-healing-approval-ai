@@ -45,7 +45,7 @@
           Content-Type: "application/json"
         body_format: json
         body:
-          text: "Anomaly Detected — Approval Required"
+          text: "⚠️ Anomaly Detected — AI Recommends Action"
           blocks: "{{ slack_blocks }}"
         status_code: 200
       register: slack_resp
