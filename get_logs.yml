@@ -61,5 +61,5 @@
 
     - set_stats:
         data:
-          pod_logs: "{{ pod_logs.log }}"
+          event_summary: "{{ pod_logs.log }}"
 

@@ -49,6 +49,14 @@ public class CallRecordEmitter {
         if (maxActiveCalls > 0 && currentActiveCalls >= maxActiveCalls) {
             isDropped = true;
             System.out.println("[CallRecordEmitter] Max active calls (" + maxActiveCalls + ") reached. Dropping call.");
+            System.out.println("tower=" + cityCode + " signal=dropped_calls");
+            System.out.println("CHECK connectivity ping=ok ssh=ok");
+            System.out.println("METRIC prb_utilization=38% congestion=false");
+            System.out.println("CONFIG admission_control max_calls_allowed=3 baseline=150");
+            System.out.println("WARN admission_reject_rate=82% reason=\"call_limit_exceeded\"");
+            System.out.println("AUDIT config_change user=fieldtech12 change=\"max_calls_allowed set to 3\"");
+            System.out.println("INFO neighbor_cells overloaded=false available_capacity=medium");
+            System.out.println("--------------------------------");
         }
 
         String callRecord = CallRecordGenerator.getCallRecord(cityCode, isDropped);
