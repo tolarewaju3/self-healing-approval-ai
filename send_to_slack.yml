@@ -34,7 +34,7 @@
           - type: section
             text:
               type: mrkdwn
-              text: ":white_check_mark: *Approval Required*\n<{{ approval_link }}|Open in AAP to Approve>"
+              text: "<{{ approval_link }}|Open in AAP to Approve>"
 
     
     - name: Send Slack message (incoming webhook)
