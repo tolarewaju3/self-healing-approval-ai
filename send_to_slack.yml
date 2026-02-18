@@ -27,15 +27,7 @@
             text:
               type: mrkdwn
               text: "*Why this playbook:*\n{{ reason }}"
-          - type: context
-            elements:
-              - type: mrkdwn
-                text: >-
-                  {% set parts = [] -%}
-                  {% if confidence %}{% set _ = parts.append('*Confidence:* ' ~ confidence) %}{% endif -%}
-                  {% if dropRate != '' %}{% set _ = parts.append('*dropRate:* ' ~ dropRate) %}{% endif -%}
-                  {% if windowSize != '' %}{% set _ = parts.append('*window:* ' ~ windowSize) %}{% endif -%}
-                  {{ parts | join('  |  ') if (parts | length) > 0 else ' ' }}
+
 
     - name: Send Slack message (incoming webhook)
       ansible.builtin.uri:
