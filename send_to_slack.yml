@@ -26,11 +26,11 @@
               - type: mrkdwn
                 text: "*Cell/Tower:*\n{{ cell_id }}"
               - type: mrkdwn
-                text: "*Job Template:*\n`{{ recommended_template }}`"
+                text: "*Recommended Remediation:*\n`{{ recommended_template }}`"
           - type: section
             text:
               type: mrkdwn
-              text: "*Why this template:*\n{{ reason }}"
+              text: "*Explanation:*\n{{ reason }}"
           - type: section
             text:
               type: mrkdwn
@@ -45,7 +45,7 @@
           Content-Type: "application/json"
         body_format: json
         body:
-          text: "Approval Needed: Recommended Remediation"
+          text: "Anomaly Detected — Approval Required"
           blocks: "{{ slack_blocks }}"
         status_code: 200
       register: slack_resp
