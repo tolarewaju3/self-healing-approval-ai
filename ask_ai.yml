@@ -118,5 +118,5 @@
     - set_stats:
         data:
           recommended_playbook: "{{ ai_decision.recommended_playbook }}"
-          reason: "{{ ai_decision.reason }"
+          reason: "{{ ai_decision.reason }}"
 
