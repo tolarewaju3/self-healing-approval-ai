@@ -30,7 +30,7 @@
 
     - name: Build workflow approval link
       set_fact:
-        approval_link: "{{ lookup(''env'', ''AAP_HOSTNAME'') }}/execution/administration/workflow-approvals"
+        approval_link: "{{ lookup('env', 'AAP_HOSTNAME') }}/execution/administration/workflow-approvals"
 
     - name: Send Slack message (incoming webhook)
       ansible.builtin.uri:
