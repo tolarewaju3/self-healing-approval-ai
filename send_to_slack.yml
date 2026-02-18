@@ -1,0 +1,55 @@
+---
+- name: Send Slack approval request
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    # Provide these via AAP extra_vars or credentials
+    cell_id: "ATX"
+    recommended_playbook: "{{ recommended_playbook }}"
+    reason: "{{ reason }}"
+
+  tasks:
+    - name: Build Slack blocks
+      ansible.builtin.set_fact:
+        slack_blocks:
+          - type: header
+            text:
+              type: plain_text
+              text: "Approval Needed: Recommended Remediation"
+          - type: section
+            fields:
+              - type: mrkdwn
+                text: "*Cell/Tower:*\n{{ cell_id }}"
+              - type: mrkdwn
+                text: "*Playbook:*\n`{{ recommended_playbook }}`"
+          - type: section
+            text:
+              type: mrkdwn
+              text: "*Why this playbook:*\n{{ reason }}"
+          - type: context
+            elements:
+              - type: mrkdwn
+                text: >-
+                  {% set parts = [] -%}
+                  {% if confidence %}{% set _ = parts.append('*Confidence:* ' ~ confidence) %}{% endif -%}
+                  {% if dropRate != '' %}{% set _ = parts.append('*dropRate:* ' ~ dropRate) %}{% endif -%}
+                  {% if windowSize != '' %}{% set _ = parts.append('*window:* ' ~ windowSize) %}{% endif -%}
+                  {{ parts | join('  |  ') if (parts | length) > 0 else ' ' }}
+
+    - name: Send Slack message (incoming webhook)
+      ansible.builtin.uri:
+        url: "{{ slack_webhook_url }}"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          text: "Approval Needed: Recommended Remediation"
+          blocks: "{{ slack_blocks }}"
+        status_code: 200
+      register: slack_resp
+
+    - name: Log Slack response (debug)
+      ansible.builtin.debug:
+        var: slack_resp.status
