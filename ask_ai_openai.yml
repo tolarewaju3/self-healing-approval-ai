@@ -1,5 +1,5 @@
 ---
-- name: Ask AI to choose ONE allowed job template
+- name: Ask AI to choose ONE allowed job template 
   hosts: localhost
   gather_facts: false
 
@@ -14,17 +14,19 @@
       - name: "Failover to Next Neighbor"
         description: "Sends calls to nearest neighbor"
 
-    # LiteLLM Granite endpoint
-    llm_endpoint: "https://litellm-prod.apps.maas.redhatworkshops.io/v1/chat/completions"
-    llm_model: "granite-3-2-8b-instruct"
-    llm_api_key: "{{ lookup('env', 'LITELLM_API_KEY') }}"
+    # OpenAI settings
+    openai_model: "gpt-4.1"
+    openai_endpoint: "https://api.openai.com/v1/responses"
+    openai_api_key: "{{ lookup('env', 'OPENAI_API_KEY') }}"
+
+    schema_name: "choose_template"
 
   tasks:
-    - name: Ensure LITELLM_API_KEY is set
+    - name: Ensure OPENAI_API_KEY is set
       ansible.builtin.assert:
         that:
-          - llm_api_key | length > 0
-        fail_msg: "Set LITELLM_API_KEY in your environment before running."
+          - openai_api_key | length > 0
+        fail_msg: "Set OPENAI_API_KEY in your environment before running."
 
     - name: Format allowed playbooks for prompt
       ansible.builtin.set_fact:
@@ -33,7 +35,7 @@
           - {{ p.name }} - {{ p.description }}
           {% endfor %}
 
-    - name: Build AI prompt
+    - name: Build AI prompt (exact structure)
       ansible.builtin.set_fact:
         ai_prompt: |-
           You are an automation assistant for telecom network operations.
@@ -56,26 +58,50 @@
             "reason": "<detailed explanation>"
           }
 
-    - name: Call Granite via LiteLLM
+    - name: Build schema with enum restricted to allowed playbook names
+      ansible.builtin.set_fact:
+        allowed_names: "{{ allowed_templates | map(attribute='name') | list }}"
+        output_schema:
+          type: object
+          additionalProperties: false
+          properties:
+            recommended_template:
+              type: string
+              enum: "{{ allowed_templates | map(attribute='name') | list }}"
+            reason:
+              type: string
+          required:
+            - recommended_template
+            - reason
+
+    - name: Call OpenAI Responses API with Structured Outputs
       ansible.builtin.uri:
-        url: "{{ llm_endpoint }}"
+        url: "{{ openai_endpoint }}"
         method: POST
         headers:
-          Authorization: "Bearer {{ llm_api_key }}"
+          Authorization: "Bearer {{ openai_api_key }}"
           Content-Type: "application/json"
         body_format: json
         body:
-          model: "{{ llm_model }}"
-          messages:
+          model: "{{ openai_model }}"
+          input:
             - role: "user"
-              content: "{{ ai_prompt }}"
+              content:
+                - type: "input_text"
+                  text: "{{ ai_prompt }}"
+          text:
+            format:
+              type: "json_schema"
+              name: "{{ schema_name }}"
+              strict: true
+              schema: "{{ output_schema }}"
         return_content: true
         status_code: 200
-      register: llm_resp
+      register: openai_resp
 
-    - name: Extract raw model output text
+    - name: Extract model JSON text
       ansible.builtin.set_fact:
-        ai_decision: "{{ llm_resp.json.choices[0].message.content | default('{}') }}"
+        ai_decision: "{{ openai_resp.json.output[0].content[0].text | default('') }}"
 
     - name: Show AI decision
       ansible.builtin.debug:
@@ -83,13 +109,14 @@
           - "recommended_template: {{ ai_decision.recommended_template }}"
           - "reason: {{ ai_decision.reason }}"
 
-    - name: Ensure recommended template is allowed
+    - name: Ensure recommendeded template is allowed
       ansible.builtin.assert:
         that:
-          - ai_decision.recommended_template in (allowed_templates | map(attribute='name') | list)
+          - ai_decision.recommended_template in allowed_names
         fail_msg: "AI returned a template not in the allowed list."
 
     - set_stats:
         data:
           recommended_template: "{{ ai_decision.recommended_template }}"
           reason: "{{ ai_decision.reason }}"
+
