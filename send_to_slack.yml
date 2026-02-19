@@ -20,7 +20,7 @@
           - type: header
             text:
               type: plain_text
-              text: "Approval Needed: Recommended Remediation"
+              text: "⚠️ Anomaly Detected — AI Recommends Action"
           - type: section
             fields:
               - type: mrkdwn
@@ -45,7 +45,7 @@
           Content-Type: "application/json"
         body_format: json
         body:
-          text: "⚠️ Anomaly Detected — AI Recommends Action"
+          text: "Anomaly Detected — Approval Required"
           blocks: "{{ slack_blocks }}"
         status_code: 200
       register: slack_resp
