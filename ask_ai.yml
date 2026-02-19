@@ -16,7 +16,7 @@
 
     # LiteLLM Granite endpoint
     llm_endpoint: "https://litellm-prod.apps.maas.redhatworkshops.io/v1/chat/completions"
-    llm_model: "granite-4-0-h-tiny"
+    llm_model: "granite-3-2-8b-instruct"
     llm_api_key: "{{ lookup('env', 'LITELLM_API_KEY') }}"
 
   tasks:
