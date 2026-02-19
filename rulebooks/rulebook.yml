@@ -20,7 +20,7 @@
           - event.body.cell_id
       actions:
         - debug:
-            msg: "Tower {{ event.body.cell_id }} is down. Remediating.."
+            msg: "Tower {{ event.body.cell_id }} drop rate exceeded threshold. Remediating.."
         - run_workflow_template:
            name: cell-tower-remediation-workflow
            organization: Default

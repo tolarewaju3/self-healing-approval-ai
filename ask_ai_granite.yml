@@ -1,0 +1,95 @@
+---
+- name: Ask AI to choose ONE allowed job template
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    tower: "ATX"
+
+    allowed_templates:
+      - name: "Restart Cell Tower"
+        description: "Restarts cell towers"
+      - name: "setup-cell-tower"
+        description: "Checks for configuration drift and resets to known good config"
+      - name: "Failover to Next Neighbor"
+        description: "Sends calls to nearest neighbor"
+
+    # LiteLLM Granite endpoint
+    llm_endpoint: "https://litellm-prod.apps.maas.redhatworkshops.io/v1/chat/completions"
+    llm_model: "granite-3-2-8b-instruct"
+    llm_api_key: "{{ lookup('env', 'LITELLM_API_KEY') }}"
+
+  tasks:
+    - name: Ensure LITELLM_API_KEY is set
+      ansible.builtin.assert:
+        that:
+          - llm_api_key | length > 0
+        fail_msg: "Set LITELLM_API_KEY in your environment before running."
+
+    - name: Format allowed playbooks for prompt
+      ansible.builtin.set_fact:
+        allowed_templates_text: |-
+          {% for p in allowed_templates %}
+          - {{ p.name }} - {{ p.description }}
+          {% endfor %}
+
+    - name: Build AI prompt
+      ansible.builtin.set_fact:
+        ai_prompt: |-
+          You are an automation assistant for telecom network operations.
+
+          Your job is to select ONE playbook from the allowed list.
+
+          Do not create new playbooks.
+          Do not invent commands.
+          Only return a valid JSON object.
+
+          Event Context:
+          {{ event_summary }}
+
+          Allowed Playbooks:
+          {{ allowed_templates_text }}
+
+          Return format:
+          {
+            "recommended_template": "<playbook_name>",
+            "reason": "<detailed explanation>"
+          }
+
+    - name: Call Granite via LiteLLM
+      ansible.builtin.uri:
+        url: "{{ llm_endpoint }}"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ llm_api_key }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          model: "{{ llm_model }}"
+          messages:
+            - role: "user"
+              content: "{{ ai_prompt }}"
+        return_content: true
+        status_code: 200
+      register: llm_resp
+
+    - name: Extract raw model output text
+      ansible.builtin.set_fact:
+        ai_decision: "{{ llm_resp.json.choices[0].message.content | default('{}') }}"
+
+    - name: Show AI decision
+      ansible.builtin.debug:
+        msg:
+          - "recommended_template: {{ ai_decision.recommended_template }}"
+          - "reason: {{ ai_decision.reason }}"
+
+    - name: Ensure recommended template is allowed
+      ansible.builtin.assert:
+        that:
+          - ai_decision.recommended_template in (allowed_templates | map(attribute='name') | list)
+        fail_msg: "AI returned a template not in the allowed list."
+
+    - set_stats:
+        data:
+          recommended_template: "{{ ai_decision.recommended_template }}"
+          reason: "{{ ai_decision.reason }}"
