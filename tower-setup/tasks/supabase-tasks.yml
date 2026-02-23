@@ -1,0 +1,67 @@
+---
+- name: Check if supabase-kubernetes directory exists
+  ansible.builtin.stat:
+    path: /tmp/supabase-kubernetes
+  register: supabase_repo
+
+- name: Clone supabase-kubernetes repository
+  ansible.builtin.git:
+    repo: https://github.com/supabase/supabase-kubernetes.git
+    dest: /tmp/supabase-kubernetes
+    version: main
+    update: yes
+  register: git_clone_result
+
+- name: Check if Helm is installed
+  ansible.builtin.command:
+    cmd: helm version --short
+  register: helm_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail if Helm is not installed
+  ansible.builtin.fail:
+    msg: Helm is required to install Supabase. Please install Helm first.
+  when: helm_check.rc != 0
+
+- name: Create Supabase namespace
+  kubernetes.core.k8s:
+    name: supabase
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Check if values file exists
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../supabase/values.example.yaml"
+  register: values_file
+
+- name: Install Supabase via Helm
+  kubernetes.core.helm:
+    name: supabase
+    chart_ref: /tmp/supabase-kubernetes/charts/supabase
+    release_namespace: supabase
+    create_namespace: false
+    wait: yes
+    wait_condition:
+      type: Ready
+      status: "True"
+    timeout: 600s
+    values_files:
+      - "{{ playbook_dir }}/../supabase/values.example.yaml"
+    state: present
+  when: values_file.stat.exists
+
+- name: Install Supabase via Helm (without values file)
+  kubernetes.core.helm:
+    name: supabase
+    chart_ref: /tmp/supabase-kubernetes/charts/supabase
+    release_namespace: supabase
+    create_namespace: false
+    wait: yes
+    wait_condition:
+      type: Ready
+      status: "True"
+    timeout: 600s
+    state: present
+  when: not values_file.stat.exists

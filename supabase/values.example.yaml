@@ -1,0 +1,343 @@
+secret:
+  jwt:
+    anonKey: CHANGEME
+    serviceKey: CHANGEME
+    secret: CHANGEME
+  smtp:
+    username: your-mail@example.com
+    password: example123456
+  dashboard:
+    username: supabase
+    password: this_password_is_insecure_and_should_be_updated
+  db:
+    username: postgres
+    password: example123456
+    database: postgres
+  analytics:
+    apiKey: your-super-secret-and-long-logflare-key
+
+db:
+  enabled: true
+  image:
+    tag: 15.1.0.147
+  livenessProbe:
+    exec:
+      command:
+        - pg_isready
+        - -U
+        - postgres
+    initialDelaySeconds: 3
+  persistence:
+    enabled: false
+  config:
+    init.sql: |
+      -- Create user_cloud_builds table
+      CREATE OR REPLACE FUNCTION "public"."get_avg_recovery_time"() RETURNS double precision
+          LANGUAGE "plpgsql"
+          AS $$
+      BEGIN
+        RETURN (
+          SELECT
+            EXTRACT(EPOCH FROM AVG(completed.event_time - started.event_time))
+          FROM
+            remediation_events started
+          JOIN
+            remediation_events completed
+            ON completed.event_time > started.event_time
+          WHERE
+            started.event_type = 'started'
+            AND completed.event_type = 'completed'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM remediation_events mid
+              WHERE mid.event_type = 'started'
+                AND mid.event_time > started.event_time
+                AND mid.event_time < completed.event_time
+            )
+        );
+      END;
+      $$;
+      
+      ALTER FUNCTION "public"."get_avg_recovery_time"() OWNER TO "postgres";
+
+      CREATE OR REPLACE FUNCTION "public"."get_avg_recovery_time_better"() RETURNS double precision
+          LANGUAGE "plpgsql"
+          AS $$
+      BEGIN
+        RETURN (
+          SELECT
+            AVG(EXTRACT(EPOCH FROM (completed.event_time - clusters.last_down)))
+          FROM
+            get_tower_clusters() AS clusters
+          JOIN
+            remediation_events AS completed
+            ON completed.event_type = 'completed'
+               AND completed.event_time > clusters.last_down
+          WHERE clusters.last_down IS NOT NULL
+        );
+      END;
+      $$;
+
+
+      ALTER FUNCTION "public"."get_avg_recovery_time_better"() OWNER TO "postgres";
+
+
+      CREATE OR REPLACE FUNCTION "public"."get_tower_clusters"() RETURNS TABLE("name" "text", "lat" numeric, "lng" numeric, "total_calls" bigint, "dropped_calls" bigint, "drop_rate" numeric, "last_down" timestamp with time zone)
+          LANGUAGE "plpgsql"
+          AS $$BEGIN
+        RETURN QUERY
+        WITH latest_calls AS (
+          SELECT *
+          FROM (
+            SELECT *, 
+                   ROW_NUMBER() OVER (PARTITION BY cell_id ORDER BY timestamp DESC) AS rn
+            FROM call_records
+          ) sub
+          WHERE rn <= 30
+        )
+        SELECT 
+         cr.cell_id AS name,
+          MAX(cr.lat) AS lat,
+          MAX(cr.lng) AS lng,
+          COUNT(*) AS total_calls,
+          SUM(CASE WHEN cr.is_dropped THEN 1 ELSE 0 END) AS dropped_calls,
+          ROUND(SUM(CASE WHEN cr.is_dropped THEN 1 ELSE 0 END) * 1.0 / COUNT(*), 2) AS drop_rate,
+          MAX(CASE WHEN cr.is_dropped THEN cr.timestamp ELSE NULL END) AS last_down
+        FROM latest_calls cr
+        GROUP BY cr.cell_id
+        HAVING COUNT(*) >= 5
+        LIMIT 10;
+      END;$$;
+
+
+      ALTER FUNCTION "public"."get_tower_clusters"() OWNER TO "postgres";
+
+      CREATE TABLE IF NOT EXISTS "public"."call_records" (
+          "id" bigint NOT NULL,
+          "lat" numeric(9,6) NOT NULL,
+          "lng" numeric(9,6) NOT NULL,
+          "signal_strength" integer NOT NULL,
+          "is_dropped" boolean DEFAULT false NOT NULL,
+          "timestamp" timestamp with time zone,
+          "cell_id" "text"
+      );
+
+
+      ALTER TABLE "public"."call_records" OWNER TO "postgres";
+
+
+      CREATE SEQUENCE IF NOT EXISTS "public"."call_records_id_seq"
+          START WITH 1
+          INCREMENT BY 1
+          NO MINVALUE
+          NO MAXVALUE
+          CACHE 1;
+
+
+      ALTER SEQUENCE "public"."call_records_id_seq" OWNER TO "postgres";
+
+      ALTER SEQUENCE "public"."call_records_id_seq" OWNED BY "public"."call_records"."id";
+
+      CREATE TABLE IF NOT EXISTS "public"."remediation_events" (
+          "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+          "event_time" timestamp with time zone DEFAULT "now"() NOT NULL,
+          "event_type" "text",
+          "tower_id" "text",
+          "msg" "text",
+          "job_link" "text",
+          "ticket_link" "text"
+      );
+
+
+      ALTER TABLE "public"."remediation_events" OWNER TO "postgres";
+
+      ALTER TABLE ONLY "public"."call_records" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."call_records_id_seq"'::"regclass");
+
+      ALTER TABLE ONLY "public"."call_records"
+          ADD CONSTRAINT "call_records_pkey" PRIMARY KEY ("id");
+
+      ALTER TABLE ONLY "public"."remediation_events"
+          ADD CONSTRAINT "remediation_events_pkey" PRIMARY KEY ("id");
+
+      CREATE INDEX "idx_call_records_dropped" ON "public"."call_records" USING "btree" ("is_dropped");
+
+      CREATE POLICY "Allow public access" ON "public"."call_records" FOR SELECT TO "anon" USING (true);
+      CREATE POLICY "Enable insert for authenticated users only" ON "public"."call_records" FOR INSERT TO "anon" WITH CHECK (true);
+
+      ALTER TABLE "public"."call_records" ENABLE ROW LEVEL SECURITY;
+      ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
+
+
+      ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."call_records";
+      ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."remediation_events";
+
+      GRANT USAGE ON SCHEMA "public" TO "postgres";
+      GRANT USAGE ON SCHEMA "public" TO "anon";
+      GRANT USAGE ON SCHEMA "public" TO "authenticated";
+      GRANT USAGE ON SCHEMA "public" TO "service_role";
+
+      GRANT ALL ON FUNCTION "public"."get_avg_recovery_time"() TO "anon";
+      GRANT ALL ON FUNCTION "public"."get_avg_recovery_time"() TO "authenticated";
+      GRANT ALL ON FUNCTION "public"."get_avg_recovery_time"() TO "service_role";
+
+
+      GRANT ALL ON FUNCTION "public"."get_avg_recovery_time_better"() TO "anon";
+      GRANT ALL ON FUNCTION "public"."get_avg_recovery_time_better"() TO "authenticated";
+      GRANT ALL ON FUNCTION "public"."get_avg_recovery_time_better"() TO "service_role";
+
+      GRANT ALL ON FUNCTION "public"."get_tower_clusters"() TO "anon";
+      GRANT ALL ON FUNCTION "public"."get_tower_clusters"() TO "authenticated";
+      GRANT ALL ON FUNCTION "public"."get_tower_clusters"() TO "service_role";
+
+      GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."call_records" TO "anon";
+      GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."call_records" TO "authenticated";
+      GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."call_records" TO "service_role";
+
+      GRANT ALL ON SEQUENCE "public"."call_records_id_seq" TO "anon";
+      GRANT ALL ON SEQUENCE "public"."call_records_id_seq" TO "authenticated";
+      GRANT ALL ON SEQUENCE "public"."call_records_id_seq" TO "service_role";
+
+
+      GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."remediation_events" TO "anon";
+      GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."remediation_events" TO "authenticated";
+      GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."remediation_events" TO "service_role";
+
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "postgres";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "anon";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "authenticated";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "service_role";
+
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "postgres";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "anon";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "authenticated";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "service_role";
+
+
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLES TO "postgres";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLES TO "anon";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLES TO "authenticated";
+      ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLES TO "service_role";
+    
+studio:
+  image:
+    tag: 20240326-5e5586d
+  environment:
+    STUDIO_DEFAULT_ORGANIZATION: "My Organization"
+    STUDIO_DEFAULT_PROJECT: "My Project"
+    SUPABASE_PUBLIC_URL: http://example.com/
+    NEXT_PUBLIC_ENABLE_LOGS: "true"
+  livenessProbe:
+    httpGet:
+      path: /api/profile
+      port: 3000
+    initialDelaySeconds: 3
+
+auth:
+  image:
+    tag: v2.143.0
+  environment:
+    API_EXTERNAL_URL: http://example.com
+    GOTRUE_SITE_URL: http://example.com
+    GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+    GOTRUE_MAILER_AUTOCONFIRM: "true"
+    GOTRUE_SMTP_ADMIN_EMAIL: "your-mail@example.com"
+    GOTRUE_SMTP_HOST: "smtp.example.com"
+    GOTRUE_SMTP_PORT: "587"
+    GOTRUE_SMTP_SENDER_NAME: "your-mail@example.com"
+
+rest:
+  image:
+    tag: v12.0.1
+
+realtime:
+  image:
+    tag: v2.27.5
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 4000
+    initialDelaySeconds: 3
+  fullnameOverride: "realtime-dev"
+
+meta:
+  image:
+    tag: v0.80.0
+
+storage:
+  image:
+    tag: v0.46.4
+  livenessProbe:
+    httpGet:
+      path: /status
+      port: 5000
+    initialDelaySeconds: 3
+  persistence:
+    enabled: false
+
+imgproxy:
+  image:
+    tag: v3.8.0
+  environment:
+    IMGPROXY_ENABLE_WEBP_DETECTION: "true"
+  livenessProbe:
+    exec:
+      command:
+        - imgproxy
+        - health
+    initialDelaySeconds: 3
+  persistence:
+    enabled: false
+
+kong:
+  image:
+    repository: kong
+    tag: 2.8.1
+  environment:
+    KONG_DECLARATIVE_CONFIG: /usr/local/kong/kong.yml
+    KONG_LOG_LEVEL: info
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /
+    tls: []
+      # - secretName: example-ingress-tls
+      #   hosts:
+      #     - example.com
+    hosts:
+      - host: example.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+analytics:
+  image:
+    tag: 1.4.0
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 4000
+    initialDelaySeconds: 3
+
+vector:
+  image:
+    tag: 0.34.0-alpine
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 9001
+    initialDelaySeconds: 3
+  ## Vector requires logs from the control plane to function.
+  ## This is normally stored in /var/log/pods
+  ## Modify these values according to your environment.
+  volumeMounts:
+    - name: pod-logs
+      mountPath: /var/log/pods
+  volumes:
+    - name: pod-logs
+      hostPath:
+        path: /var/log/pods
+
+functions:
+  image:
+    tag: v1.41.2
