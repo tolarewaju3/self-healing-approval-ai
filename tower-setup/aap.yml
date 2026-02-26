@@ -10,7 +10,7 @@
   vars:
     namespace: aap
     project_name: "cell-tower"
-    scm_url: "https://github.com/tolarewaju3/self-healing-config-drift.git"
+    scm_url: "https://github.com/tolarewaju3/self-healing-approval-ai.git"
     workflow_name: "cell-tower-remediation-workflow"
 
   tasks:
@@ -174,6 +174,78 @@
         scm_branch: master
         state: present
 
+    - name: Create Slack webhook custom credential type
+      awx.awx.credential_type:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "slack_webhook_url"
+        kind: "cloud"
+        description: "Credential type for Slack Webhook"
+        inputs:
+          fields:
+            - id: slack_webhook_url
+              type: string
+              label: Slack Webhook URL
+              secret: true
+          required:
+            - slack_webhook_url
+        injectors:
+          env:
+            SLACK_WEBHOOK_URL: '{{ slack_webhook_url }}'
+        state: present
+
+    - name: Create Slack Webhook URL
+      awx.awx.credential:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "slack_webhook"
+        description: "URL for Slack Webhook"
+        credential_type: "slack_webhook_url"
+        organization: Default
+        inputs:
+          slack_webhook_url: "{{ slack_webhook_url }}"
+        state: present
+
+    - name: Create LiteLLM custom credential type
+      awx.awx.credential_type:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "litellm_key"
+        kind: "cloud"
+        description: "Credential type for LiteLLM"
+        inputs:
+          fields:
+            - id: litellm_api_key
+              type: string
+              label: LiteLLM API Key
+              secret: true
+          required:
+            - litellm_api_key
+        injectors:
+          env:
+            LITELLM_API_KEY: '{{ litellm_api_key }}'
+        state: present
+
+    - name: Create LiteLLM credential
+      awx.awx.credential:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "litellm"
+        description: "Credential for LiteLLM access"
+        credential_type: "litellm_key"
+        organization: Default
+        inputs:
+          litellm_api_key: "{{ litellm_api_key }}"
+        state: present
+
     - name: Create Supabase custom credential type
       awx.awx.credential_type:
         controller_host: "{{ controller_hostname }}"
@@ -304,20 +376,71 @@
           password: "{{ aap_password }}"
       register: result
 
-    - name: Create Job Template for detect-drift
+    - name: Create Job Template for gather logs
       awx.awx.job_template:
         controller_host: "{{ controller_hostname }}"
         controller_username: "admin"
         controller_password: "{{ controller_password }}"
         validate_certs: false
-        name: "detect-drift"
+        name: "gather-logs"
         job_type: "run"
         project: "cell-tower"
         inventory: "Demo Inventory"
-        playbook: "playbooks/detect-drift.yml"
+        playbook: "playbooks/get_logs.yml"
+        credentials: 
+          - "OpenShift Token Credential"
+        execution_environment: "Default execution environment"
+        ask_job_type_on_launch: true
+        ask_variables_on_launch: true
+
+    - name: Create Job Template for ask ai
+      awx.awx.job_template:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "ask-ai"
+        job_type: "run"
+        project: "cell-tower"
+        inventory: "Demo Inventory"
+        playbook: "playbooks/ask_ai.yml"
+        credentials: 
+          - "litellm"
+        execution_environment: "Default execution environment"
+        ask_job_type_on_launch: true
+        ask_variables_on_launch: true
+
+    - name: Create Job Template for send to slack
+      awx.awx.job_template:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "send-to-slack"
+        job_type: "run"
+        project: "cell-tower"
+        inventory: "Demo Inventory"
+        playbook: "playbooks/send_to_slack.yml"
+        credentials: 
+          - "AAP Admin Credential"
+          - "slack_webhook"
+        execution_environment: "Default execution environment"
+        ask_job_type_on_launch: true
+        ask_variables_on_launch: true
+
+    - name: Create Job Template for launch job
+      awx.awx.job_template:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "launch-job"
+        job_type: "run"
+        project: "cell-tower"
+        inventory: "Demo Inventory"
+        playbook: "playbooks/launch_job.yml"
         credentials: 
           - "AAP Controller Credential"
-          - "supabase"
         execution_environment: "Default execution environment"
         ask_job_type_on_launch: true
         ask_variables_on_launch: true
@@ -329,6 +452,44 @@
         controller_password: "{{ controller_password }}"
         validate_certs: false
         name: "setup-cell-tower"
+        job_type: "run"
+        project: "cell-tower"
+        inventory: "Demo Inventory"
+        playbook: "playbooks/setup-cell-tower.yml"
+        credentials: 
+          - "OpenShift Token Credential"
+          - "supabase"
+          - "servicenow"
+        execution_environment: "Default execution environment"
+        ask_job_type_on_launch: true
+        ask_variables_on_launch: true
+
+    - name: Create Job Template for restart-cell-tower
+      awx.awx.job_template:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "restart-cell-tower"
+        job_type: "run"
+        project: "cell-tower"
+        inventory: "Demo Inventory"
+        playbook: "playbooks/setup-cell-tower.yml"
+        credentials: 
+          - "OpenShift Token Credential"
+          - "supabase"
+          - "servicenow"
+        execution_environment: "Default execution environment"
+        ask_job_type_on_launch: true
+        ask_variables_on_launch: true
+
+    - name: Create Job Template for restart-cell-tower
+      awx.awx.job_template:
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "admin"
+        controller_password: "{{ controller_password }}"
+        validate_certs: false
+        name: "failover-to-next-neighbor"
         job_type: "run"
         project: "cell-tower"
         inventory: "Demo Inventory"
@@ -368,21 +529,21 @@
           controller_password: "{{ controller_password }}"
           validate_certs: false
           name: "{{ workflow_name }}"
-          description: "Creates a ServiceNow incident and then remediates the cell tower"
+          description: "Find root cause and remediates the cell tower"
           organization: Default
           ask_variables_on_launch: true
           state: present
 
-      - name: Add fix-cell-tower node to workflow
+      - name: Add apply remediation node to workflow
         awx.awx.workflow_job_template_node:
           controller_host: "{{ controller_hostname }}"
           controller_username: "admin"
           controller_password: "{{ controller_password }}"
           validate_certs: false
-          identifier: "Fix Cell Tower"
+          identifier: "Apply Remediation"
           job_type: "run"
           workflow_job_template: "{{ workflow_name }}"
-          unified_job_template: "setup-cell-tower"
+          unified_job_template: "launch-job"
           organization: Default
           state: present
 
@@ -401,7 +562,7 @@
           organization: Default
           state: present
 
-      - name: Link approval node to fix-cell-tower
+      - name: Link approval node to apply remediation
         awx.awx.workflow_job_template_node:
           controller_host: "{{ controller_hostname }}"
           controller_username: "admin"
@@ -410,66 +571,50 @@
           identifier: "Approve Remediation"
           workflow_job_template: "{{ workflow_name }}"
           success_nodes:
-            - "Fix Cell Tower"
+            - "Apply Remediation"
           organization: Default
           state: present
 
-      - name: Add create-incident node to workflow
+      - name: Add send-to-slack node to workflow
         awx.awx.workflow_job_template_node:
           controller_host: "{{ controller_hostname }}"
           controller_username: "admin"
           controller_password: "{{ controller_password }}"
           validate_certs: false
-          identifier: "Create ServiceNow Ticket"
+          identifier: "Send to Slack"
           workflow_job_template: "{{ workflow_name }}"
-          unified_job_template: "create-incident"
-          extra_data:
-            config_drift: true
-          always_nodes:
+          unified_job_template: "send-to-slack"
+          success_nodes:
             - "Approve Remediation"
           organization: Default
           state: present
 
-      - name: Add create-incident node to workflow
+      - name: Add ask ai node to workflow
         awx.awx.workflow_job_template_node:
           controller_host: "{{ controller_hostname }}"
           controller_username: "admin"
           controller_password: "{{ controller_password }}"
           validate_certs: false
-          identifier: "Create Ticket"
+          identifier: "Get AI Suggestion"
           workflow_job_template: "{{ workflow_name }}"
-          unified_job_template: "create-incident"
+          unified_job_template: "ask-ai"
+          success_nodes:
+            - "Send to Slack"
           organization: Default
           state: present
 
-      - name: Add detect-drift node to workflow
+      - name: Add get-logs node to workflow
         awx.awx.workflow_job_template_node:
           controller_host: "{{ controller_hostname }}"
           controller_username: "admin"
           controller_password: "{{ controller_password }}"
           validate_certs: false
-          identifier: "Drift Detected?"
+          identifier: "Gather Logs"
+          job_type: "run"
           workflow_job_template: "{{ workflow_name }}"
-          unified_job_template: "detect-drift"
+          unified_job_template: "gather-logs"
           success_nodes:
-            - "Create ServiceNow Ticket"
-          failure_nodes:
-            - "Create Ticket"
-          organization: Default
-          state: present
-
-      - name: Add check-cell-tower node to workflow
-        awx.awx.workflow_job_template_node:
-          controller_host: "{{ controller_hostname }}"
-          controller_username: "admin"
-          controller_password: "{{ controller_password }}"
-          validate_certs: false
-          identifier: "Check Tower"
-          job_type: "check"
-          workflow_job_template: "{{ workflow_name }}"
-          unified_job_template: "setup-cell-tower"
-          success_nodes:
-            - "Drift Detected?"
+            - "Get AI Suggestion"
           organization: Default
           state: present
 
