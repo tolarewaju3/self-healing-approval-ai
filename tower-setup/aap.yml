@@ -225,17 +225,17 @@
               type: string
               label: LiteLLM API Key
               secret: true
-            - id: litellm_endpoint
+            - id: litellm_base_url
               type: string
-              label: LiteLLM Endpoints
+              label: LiteLLM Base URL
               secret: false
           required:
             - litellm_api_key
-            - litellm_endpoint
+            - litellm_base_url
         injectors:
           env:
             LITELLM_API_KEY: '{{ litellm_api_key }}'
-            LITELLM_ENDPOINT: '{{ litellm_endpoint }}'
+            LITELLM_BASE_URL: '{{ litellm_base_url }}'
         state: present
 
     - name: Create LiteLLM credential
