@@ -1,16 +1,4 @@
 ---
-- name: Check if supabase-kubernetes directory exists
-  ansible.builtin.stat:
-    path: /tmp/supabase-kubernetes
-  register: supabase_repo
-
-- name: Clone supabase-kubernetes repository
-  ansible.builtin.git:
-    repo: https://github.com/supabase/supabase-kubernetes.git
-    dest: /tmp/supabase-kubernetes
-    version: main
-    update: yes
-  register: git_clone_result
 
 - name: Check if Helm is installed
   ansible.builtin.command:
@@ -33,35 +21,39 @@
 
 - name: Check if values file exists
   ansible.builtin.stat:
-    path: "{{ playbook_dir }}/../supabase/values.example.yaml"
+    path: "{{ playbook_dir }}/../supabase/values.yaml"
   register: values_file
+
+- name: Add stable chart repo
+  kubernetes.core.helm_repository:
+    name: stable
+    repo_url: "https://supabase-community.github.io/supabase-kubernetes"
 
 - name: Install Supabase via Helm
   kubernetes.core.helm:
     name: supabase
-    chart_ref: /tmp/supabase-kubernetes/charts/supabase
+    chart_ref: supabase/supabase
     release_namespace: supabase
     create_namespace: false
-    wait: yes
-    wait_condition:
-      type: Ready
-      status: "True"
-    timeout: 600s
     values_files:
-      - "{{ playbook_dir }}/../supabase/values.example.yaml"
+      - "{{ playbook_dir }}/../supabase/values.yaml"
     state: present
   when: values_file.stat.exists
 
-- name: Install Supabase via Helm (without values file)
-  kubernetes.core.helm:
-    name: supabase
-    chart_ref: /tmp/supabase-kubernetes/charts/supabase
-    release_namespace: supabase
-    create_namespace: false
-    wait: yes
-    wait_condition:
-      type: Ready
-      status: "True"
-    timeout: 600s
+- name: Create Supabase Route
+  kubernetes.core.k8s:
     state: present
-  when: not values_file.stat.exists
+    definition:
+      apiVersion: route.openshift.io/v1
+      kind: Route
+      metadata:
+        name: supabase
+        namespace: supabase
+      spec:
+        to:
+          kind: Service
+          name: supabase-supabase-kong
+        port:
+          targetPort: 8000
+
+
