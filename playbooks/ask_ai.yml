@@ -7,11 +7,11 @@
     tower: "ATX"
 
     allowed_templates:
-      - name: "Restart Cell Tower"
+      - name: "restart-cell-tower"
         description: "Restarts cell towers"
       - name: "setup-cell-tower"
         description: "Checks for configuration drift and resets to known good config"
-      - name: "Failover to Next Neighbor"
+      - name: "failover-to-next-neighbor"
         description: "Sends calls to nearest neighbor"
 
     # LiteLLM Granite endpoint
