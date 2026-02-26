@@ -15,16 +15,22 @@
         description: "Sends calls to nearest neighbor"
 
     # LiteLLM Granite endpoint
-    llm_endpoint: "https://litellm-prod.apps.maas.redhatworkshops.io/v1/chat/completions"
-    llm_model: "granite-3-2-8b-instruct"
-    llm_api_key: "{{ lookup('env', 'LITELLM_API_KEY') }}"
+    llm_endpoint: "{{ lookup('env','AI_BASE_URL') }}/v1/chat/completions"
+    llm_model: "{{ lookup('env', 'AI_MODEL') }}"
+    llm_api_key: "{{ lookup('env', 'AI_API_KEY') }}"
 
   tasks:
-    - name: Ensure LITELLM_API_KEY is set
+    - name: Ensure API_KEY is set
       ansible.builtin.assert:
         that:
           - llm_api_key | length > 0
-        fail_msg: "Set LITELLM_API_KEY in your environment before running."
+        fail_msg: "Set API_KEY in your environment before running."
+
+    - name: Print AI information
+      debug:
+        msg:
+          - "AI Provider: {{ lookup('env','AI_BASE_URL') }}"
+          - "Model: {{ lookup('env','AI_MODEL') }}"
 
     - name: Format allowed playbooks for prompt
       ansible.builtin.set_fact:
