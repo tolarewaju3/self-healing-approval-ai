@@ -210,46 +210,54 @@
           slack_webhook_url: "{{ slack_webhook_url }}"
         state: present
 
-    - name: Create LiteLLM custom credential type
+    - name: Create AI Provider custom credential type
       awx.awx.credential_type:
         controller_host: "{{ controller_hostname }}"
         controller_username: "admin"
         controller_password: "{{ controller_password }}"
         validate_certs: false
-        name: "litellm_key"
+        name: "ai_key"
         kind: "cloud"
-        description: "Credential type for LiteLLM"
+        description: "Credential type for llm"
         inputs:
           fields:
-            - id: litellm_api_key
+            - id: ai_api_key
               type: string
-              label: LiteLLM API Key
+              label: API Key
               secret: true
-            - id: litellm_base_url
+            - id: ai_base_url
               type: string
-              label: LiteLLM Base URL
+              label: Base URL
+              secret: false
+            - id: ai_model
+              type: string
+              label: Model Name
               secret: false
           required:
-            - litellm_api_key
-            - litellm_base_url
+            - ai_api_key
+            - ai_base_url
+            - ai_model
         injectors:
           env:
-            LITELLM_API_KEY: '{{ litellm_api_key }}'
-            LITELLM_BASE_URL: '{{ litellm_base_url }}'
+            AI_API_KEY: '{{ ai_api_key }}'
+            AI_BASE_URL: '{{ ai_base_url }}'
+            AI_MODEL: '{{ ai_model }}'
         state: present
 
-    - name: Create LiteLLM credential
+    - name: Create AI credential
       awx.awx.credential:
         controller_host: "{{ controller_hostname }}"
         controller_username: "admin"
         controller_password: "{{ controller_password }}"
         validate_certs: false
-        name: "litellm"
-        description: "Credential for LiteLLM access"
-        credential_type: "litellm_key"
+        name: "llm"
+        description: "Credential for LLM access"
+        credential_type: "ai_key"
         organization: Default
         inputs:
-          litellm_api_key: "{{ litellm_api_key }}"
+          ai_api_key: "{{ ai_api_key }}"
+          ai_base_url: "{{ ai_base_url }}"
+          ai_model: "{{ ai_model }}"
         state: present
 
     - name: Create Supabase custom credential type
@@ -411,7 +419,7 @@
         inventory: "Demo Inventory"
         playbook: "playbooks/ask_ai.yml"
         credentials: 
-          - "litellm"
+          - "llm"
         execution_environment: "Default execution environment"
         ask_job_type_on_launch: true
         ask_variables_on_launch: true
